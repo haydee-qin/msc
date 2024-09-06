@@ -1,0 +1,420 @@
+{\rtf1\ansi\ansicpg936\cocoartf2707
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 Helvetica;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 # process data\
+with open('/Users/haydee_mac/Desktop/CSC440-Data Mining/DM HW3/anonymous-msweb.data') as f:\
+	data = f.readlines()\
+\
+# Remove the first 7 lines of the data\
+data = data[7:]\
+\
+# Split each line of the data into a list, remove the newline character, and store the result in a list of lists\
+data = [i.rstrip('\\n').split(',') for i in data]\
+\
+# Create a list of rows in `data` where the first element of each row is 'A'\
+att = [i for  i in data if i[0]=='A']\
+\
+# Create a list of rows in `data` where the first element of each row is 'C' or 'V'\
+acts = [i for i in data if i[0]=='C' or i[0]=='V']\
+\
+# Create a list of indices in `acts` where the first element of each row is 'C'\
+idx = [i for i in range(len(acts)) if acts[i][0]=='C']\
+\
+# Add one more element to `idx` to represent the end of `acts`\
+idx.append(len(acts)+1)\
+\
+# Generate a dataset for algorithms\
+dataset = []\
+for i in range(len(idx)-1):\
+	# Get a slice of `acts` from the current index to the next one\
+	v = acts[idx[i]+1: idx[i+1]]\
+	\
+	# Extract the second element from each row of the slice and add it to the `dataset`\
+	dataset.append([i[1] for i in v])\
+\
+# Map the names to the values in the `att` list\
+att_dic  = \{i[1]:i[3] for i in att\}\
+\
+# Replace the names in the `dataset` with the corresponding values from `att_dic`\
+dataset = [[att_dic[i] for i in j] for j in dataset]\
+\
+#Apriori\
+def create_C1(data_set):\
+	"""\
+	Create frequent candidate 1-itemset C1 by scaning data set.\
+	Args:\
+		data_set: A list of transactions. Each transaction contains several items.\
+	Returns:\
+		C1: A set which contains all frequent candidate 1-itemsets\
+	"""\
+	C1 = set()\
+	for t in data_set:\
+		for item in t:\
+			item_set = frozenset([item])\
+			C1.add(item_set)\
+	return C1\
+\
+\
+def is_apriori(Ck_item, Lksub1):\
+	"""\
+	Judge whether a frequent candidate k-itemset satisfy Apriori property.\
+	Args:\
+		Ck_item: a frequent candidate k-itemset in Ck which contains all frequent\
+				 candidate k-itemsets.\
+		Lksub1: Lk-1, a set which contains all frequent candidate (k-1)-itemsets.\
+	Returns:\
+		True: satisfying Apriori property.\
+		False: Not satisfying Apriori property.\
+	"""\
+	for item in Ck_item:\
+		sub_Ck = Ck_item - frozenset([item])\
+		if sub_Ck not in Lksub1:\
+			return False\
+	return True\
+\
+\
+def create_Ck(Lksub1, k):\
+	"""\
+	Create Ck, a set which contains all all frequent candidate k-itemsets\
+	by Lk-1's own connection operation.\
+	Args:\
+		Lksub1: Lk-1, a set which contains all frequent candidate (k-1)-itemsets.\
+		k: the item number of a frequent itemset.\
+	Return:\
+		Ck: a set which contains all all frequent candidate k-itemsets.\
+	"""\
+	Ck = set()\
+	len_Lksub1 = len(Lksub1)\
+	list_Lksub1 = list(Lksub1)\
+	for i in range(len_Lksub1):\
+		for j in range(1, len_Lksub1):\
+			l1 = list(list_Lksub1[i])\
+			l2 = list(list_Lksub1[j])\
+			l1.sort()\
+			l2.sort()\
+			if l1[0:k-2] == l2[0:k-2]:\
+				Ck_item = list_Lksub1[i] | list_Lksub1[j]\
+				# pruning\
+				if is_apriori(Ck_item, Lksub1):\
+					Ck.add(Ck_item)\
+	return Ck\
+\
+\
+def generate_Lk_by_Ck(data_set, Ck, min_support, support_data):\
+	"""\
+	Generate Lk by executing a delete policy from Ck.\
+	Args:\
+		data_set: A list of transactions. Each transaction contains several items.\
+		Ck: A set which contains all all frequent candidate k-itemsets.\
+		min_support: The minimum support.\
+		support_data: A dictionary. The key is frequent itemset and the value is support.\
+	Returns:\
+		Lk: A set which contains all all frequent k-itemsets.\
+	"""\
+	Lk = set()\
+	item_count = \{\}\
+	for t in data_set:\
+		for item in Ck:\
+			if item.issubset(t):\
+				if item not in item_count:\
+					item_count[item] = 1\
+				else:\
+					item_count[item] += 1\
+	t_num = float(len(data_set))\
+	for item in item_count:\
+		if (item_count[item] / t_num) >= min_support:\
+			Lk.add(item)\
+			support_data[item] = item_count[item] / t_num\
+	return Lk\
+\
+\
+def generate_L(data_set, k, min_support):\
+	"""\
+	Generate all frequent itemsets.\
+	Args:\
+		data_set: A list of transactions. Each transaction contains several items.\
+		k: Maximum number of items for all frequent itemsets.\
+		min_support: The minimum support.\
+	Returns:\
+		L: The list of Lk.\
+		support_data: A dictionary. The key is frequent itemset and the value is support.\
+	"""\
+	support_data = \{\}\
+	C1 = create_C1(data_set)\
+	L1 = generate_Lk_by_Ck(data_set, C1, min_support, support_data)\
+	Lksub1 = L1.copy()\
+	L = []\
+	L.append(Lksub1)\
+	for i in range(2, k+1):\
+		Ci = create_Ck(Lksub1, i)\
+		Li = generate_Lk_by_Ck(data_set, Ci, min_support, support_data)\
+		Lksub1 = Li.copy()\
+		L.append(Lksub1)\
+	return L, support_data\
+\
+\
+def generate_big_rules(L, support_data, min_conf):\
+	"""\
+	Generate big rules from frequent itemsets.\
+	Args:\
+		L: The list of Lk.\
+		support_data: A dictionary. The key is frequent itemset and the value is support.\
+		min_conf: Minimal confidence.\
+	Returns:\
+		big_rule_list: A list which contains all big rules. Each big rule is represented\
+					   as a 3-tuple.\
+	"""\
+	big_rule_list = []\
+	sub_set_list = []\
+	for i in range(0, len(L)):\
+		for freq_set in L[i]:\
+			for sub_set in sub_set_list:\
+				if sub_set.issubset(freq_set):\
+					sup_AB = support_data[freq_set]\
+					sup_B = support_data[sub_set]\
+					conf = support_data[freq_set] / support_data[freq_set - sub_set]\
+					lift = conf / sup_B\
+					big_rule = (freq_set - sub_set, sub_set,sup_AB, conf,lift)\
+					if conf >= min_conf and big_rule not in big_rule_list:\
+						big_rule_list.append(big_rule)\
+			sub_set_list.append(freq_set)\
+	return big_rule_list\
+\
+# main\
+def apriori(data_set,minSup=0.2, minConf=0.1):\
+	print(f"Params\uc0\u65306 \\nmin support: \{minSup\}\\nmin confidence: \{minConf\}")\
+	L, support_data = generate_L(data_set, k=2, min_support=minSup)\
+	big_rules_list = generate_big_rules(L, support_data, min_conf=minConf)\
+	freqItemSet = []\
+	for Lk in L:\
+		for freq_set in Lk:\
+			freqItemSet.append([freq_set,support_data[freq_set]])\
+	return big_rules_list\
+\
+\
+rules1 = apriori(dataset,minSup=0.01, minConf=0.5)\
+\
+for a,b,c,d,e in rules1:\
+	print(f"\{a\} ==> \{b\}, support=\{c:.4f\}, confidence=\{c:.4f\}")\
+\
+#FP-Grow\
+class Node:\
+	def __init__(self, node_name, count, parentNode):\
+		self.name = node_name # node name\
+		self.count = count # count of node name\
+		self.nodeLink = None # used to find all nodes with the same node name in the whole tree\
+		self.parent = parentNode # parent node\
+		self.children = \{\} # children nodes, \{node name: node address\}\
+\
+class Fp_growth:\
+	def data_compress(self, data_set):\
+		data_dic = \{\}\
+		for i in data_set:\
+			if frozenset(i) not in data_dic:\
+				data_dic[frozenset(i)] = 1\
+			else:\
+				data_dic[frozenset(i)] += 1\
+		return data_dic\
+\
+	def update_header(self, node, targetNode): # update the linked list in headertable\
+		while node.nodeLink != None:\
+			node = node.nodeLink\
+		node.nodeLink = targetNode\
+\
+	def update_fptree(self, items, count, node, headerTable): # used to update fptree\
+		if items[0] in node.children:\
+			# check if the first node in items has already been a child node\
+			node.children[items[0]].count += count\
+		else:\
+			# create a new branch\
+			node.children[items[0]] = Node(items[0], count, node)\
+			# update the linked list of the corresponding frequent itemset, add it afterwards\
+			if headerTable[items[0]][1] == None:\
+				headerTable[items[0]][1] = node.children[items[0]]\
+			else:\
+				self.update_header(headerTable[items[0]][1], node.children[items[0]])\
+		# recursive\
+		if len(items) > 1:\
+			self.update_fptree(items[1:], count, node.children[items[0]], headerTable)\
+\
+	def create_fptree(self, data_dic, min_support):  # Main function for creating tree\
+		item_count = \{\}  # Count the number of occurrences of each item\
+		for t in data_dic:  # First traverse to get frequent one-item sets\
+			for item in t:\
+				if item not in item_count:\
+					item_count[item] = data_dic[t]\
+				else:\
+					item_count[item] += data_dic[t]\
+		headerTable = \{\}\
+		for k in item_count:  # Remove items that do not meet the minimum support\
+			if item_count[k] >= min_support:\
+				headerTable[k] = item_count[k]\
+\
+		freqItemSet = set(headerTable.keys())  # The frequent item set that meets the minimum support\
+		if len(freqItemSet) == 0:\
+			return None, None\
+		for k in headerTable:\
+			headerTable[k] = [headerTable[k], None]  # element: [count, node]\
+		tree_header = Node('head node', 1, None)\
+		ite = data_dic\
+		for t in ite:  # Second traverse, build tree\
+			localD = \{\}\
+			for item in t:\
+				if item in freqItemSet:  # Filter, only take the frequent items that meet the minimum support in this sample\
+					localD[item] = headerTable[item][0]  # element : count\
+			if len(localD) > 0:\
+				# Sort the single sample based on global frequency from large to small\
+				order_item = [v[0] for v in sorted(localD.items(), key=lambda x: x[1], reverse=True)]\
+				# Update the tree with the filtered and sorted sample\
+				self.update_fptree(order_item, data_dic[t], tree_header, headerTable)\
+		return tree_header, headerTable\
+\
+	def find_path(self, node, nodepath):\
+		'''\
+		Recursively add the parent node of node to the path\
+		'''\
+		if node.parent != None:\
+			nodepath.append(node.parent.name)\
+			self.find_path(node.parent, nodepath)\
+\
+	def find_cond_pattern_base(self, node_name, headerTable):\
+		'''\
+		Find all conditional pattern bases based on the node name\
+		'''\
+		treeNode = headerTable[node_name][1]\
+		cond_pat_base = \{\}  # Save all conditional pattern bases\
+		while treeNode != None:\
+			nodepath = []\
+			self.find_path(treeNode, nodepath)\
+			if len(nodepath) > 1:\
+				cond_pat_base[frozenset(nodepath[:-1])] = treeNode.count\
+			treeNode = treeNode.nodeLink\
+		return cond_pat_base\
+\
+\
+	def create_cond_fptree(self, headerTable, min_support, temp, freq_items, support_data):\
+		# Initial frequent items are elements in headerTable\
+		freqs = [v[0] for v in sorted(headerTable.items(), key=lambda p: p[1][0])]  # sort based on the total frequency of frequent items\
+		for freq in freqs:  # for each frequent item\
+			freq_set = temp.copy()\
+			freq_set.add(freq)\
+			freq_items.add(frozenset(freq_set))\
+			if frozenset(freq_set) not in support_data:  # check if the frequent item is in support_data\
+				support_data[frozenset(freq_set)] = headerTable[freq][0]\
+			else:\
+				support_data[frozenset(freq_set)] += headerTable[freq][0]\
+\
+			cond_pat_base = self.find_cond_pattern_base(freq, headerTable)  # find all conditional pattern bases\
+			# create conditional pattern tree\
+			cond_tree, cur_headtable = self.create_fptree(cond_pat_base, min_support)\
+			if cur_headtable != None:\
+				self.create_cond_fptree(cur_headtable, min_support, freq_set, freq_items, support_data)  # recursive mine on the conditional FP tree\
+\
+	def generate_L(self, data_set, min_support):\
+		# compress the data set into a dictionary with frequency count\
+		data_dic = self.data_compress(data_set)\
+\
+		# initialize the frequent item set and support data\
+		freqItemSet = set()\
+		support_data = \{\}\
+\
+		# create the fptree of the dataset and get the header table\
+		tree_header, headerTable = self.create_fptree(data_dic, min_support)\
+\
+		# create fptree of each frequent one-item and mine frequent items and save support count\
+		self.create_cond_fptree(headerTable, min_support, set(), freqItemSet, support_data)\
+\
+		# find the maximum length of frequent items\
+		max_l = 0\
+		for i in freqItemSet:\
+			if len(i) > max_l:\
+				max_l = len(i)\
+\
+		# create a container L to store the frequent items based on their length\
+		L = [set() for _ in range(max_l)]\
+		for i in freqItemSet:\
+			L[len(i) - 1].add(i)\
+		\
+		return L, support_data\
+\
+	def generate_R(self, data_set, min_support, min_conf):\
+		# generate L, support_data using the generate_L method\
+		L, support_data = self.generate_L(data_set, min_support)\
+		\
+		# calculate the number of transactions in the data set\
+		dataset_length = len(data_set)\
+		\
+		# initialize the list to store association rules\
+		rule_list = []\
+		\
+		# initialize the list to store subsets of frequent itemsets\
+		sub_set_list = []\
+		\
+		# loop through each frequent itemset in L\
+		for i in range(0, len(L)):\
+			for freq_set in L[i]:\
+				\
+				# loop through each subset in sub_set_list\
+				for sub_set in sub_set_list:\
+					\
+					# if the subset is a proper subset of the frequent itemset,\
+					# and the difference between the frequent itemset and the subset is in support_data\
+					if sub_set.issubset(freq_set) and freq_set - sub_set in support_data:\
+						\
+						# calculate the support of A\
+						supp_A = support_data[freq_set - sub_set] \
+						\
+						# calculate the confidence of the association rule (A -> B)\
+						conf = support_data[freq_set] / supp_A   \
+						\
+						# calculate the support of A & B\
+						supp_AB = support_data[freq_set]/dataset_length  \
+						\
+						# calculate the support of B\
+						supp_B = (support_data[sub_set]/dataset_length)\
+						\
+						# calculate the lift of the association rule (A -> B)\
+						lift = conf / supp_B\
+						\
+						# create a tuple to store the association rule (A, B, support of A & B, confidence, lift)\
+						big_rule = (freq_set - sub_set, sub_set, supp_AB, conf, lift)\
+						\
+						# if the confidence is greater than or equal to min_conf and the association rule is not in rule_list, add the rule to rule_list\
+						if conf >= min_conf and big_rule not in rule_list:\
+							rule_list.append(big_rule)\
+							\
+				# add the frequent itemset to sub_set_list\
+				sub_set_list.append(freq_set)\
+		\
+		# sort the association rules in rule_list by support of A & B in descending order\
+		rule_list = sorted(rule_list, key=lambda x: (x[2]), reverse=True)\
+		\
+		# return the list of association rules\
+		return rule_list\
+\
+\
+def load_data(dataset): \
+	ans = [] \
+	for row in dataset:\
+		row = list(set(row)) \
+		row.sort()\
+		ans.append(row) \
+	return ans \
+\
+\
+def run_fpgrowth(data_set,min_support=0.1,min_conf=0.5):\
+	# main\
+	min_support = int(min_support*len(data_set))\
+	data_set = load_data(data_set)\
+	fp = Fp_growth()\
+	rule_list = fp.generate_R(data_set, min_support, min_conf)\
+	return rule_list\
+rules2 = run_fpgrowth(dataset,min_support=0.01,min_conf=0.5)\
+\
+for a,b,c,d,e in rules2:\
+	print(f"\{a\} ==> \{b\}, support=\{c:.4f\}, confidence=\{c:.4f\}")\
+}
